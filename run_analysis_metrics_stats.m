@@ -93,6 +93,7 @@ runStep(@script3_statistics_LME_new_MFR_aligned_integrated);
 %% ===== 6) NB VALIDATION (Cimbalnik HFO framework) =====
 runStep(@NB_Validation_Cimbalnik_v2);
 runStep(@NB_Validation_Plots_v4_representative);
+runStep(@decode_validation_mat);   % tidy per-event 3-class CSV (events_3class_Tampere.csv)
 
 fprintf('\nAll analyses completed.\n');
 
