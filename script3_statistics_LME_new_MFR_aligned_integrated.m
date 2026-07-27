@@ -1628,31 +1628,77 @@ plot_logp_heatmap(M, Lstars, Ldir, cell_lines, DIVlabels, ...
     ttl, 'DIV', 'Cell line', savebase, true);
 end
 
-function plot_logp_heatmap(M, Lstars, Ldir, xLabels, yLabels, ttl, xlbl, ylbl, savebase, doSave)
-[nrows,ncols] = size(M); nColors = 256;
-cmap = zeros(nColors,3); cmap(1,:)=[0.75 0.75 0.75]; cmap(2,:)=[1 1 1];
-blueStart=[0.90 0.93 1.00]; blueEnd=[0.05 0.18 0.65];
-for i=1:nColors-2; frac=(i-1)/(nColors-3); cmap(i+2,:)=blueStart+frac*(blueEnd-blueStart); end
-maxVal=6; imgData=ones(nrows,ncols);
-for r=1:nrows; for c=1:ncols
-    if isnan(M(r,c));  imgData(r,c)=1;
-    elseif M(r,c)==0;  imgData(r,c)=2;
-    else; frac=min(M(r,c),maxVal)/maxVal; imgData(r,c)=max(min(round(3+frac*(nColors-3)),nColors),3); end
-end; end
-figW=max(400,130*ncols+150); figH=max(300,90*nrows+120);
-fig=figure('Color','w','Position',[100 100 figW figH]);
-ax=axes('Parent',fig); imagesc(ax,imgData); colormap(ax,cmap); clim(ax,[1 nColors]); hold(ax,'on');
-for r=0.5:1:nrows+0.5; line(ax,[0.5 ncols+0.5],[r r],'Color','k','LineWidth',0.7,'HandleVisibility','off'); end
-for c=0.5:1:ncols+0.5; line(ax,[c c],[0.5 nrows+0.5],'Color','k','LineWidth',0.7,'HandleVisibility','off'); end
-% NOTE: significance stars are NOT drawn inside the cells; the colour scale
-% (-log10 p_adj) already encodes significance. Keeps cells clean/uncluttered.
-cb=colorbar(ax); cb.Ticks=linspace(2,nColors,7);
-cb.TickLabels={'0 (ns)','1','2','3','4','5',sprintf('>=%d',maxVal)};
-cb.Label.String='-log_{10}(p_{adj})'; cb.Label.FontSize=11;
-set(ax,'XTick',1:ncols,'XTickLabel',yLabels,'XTickLabelRotation',35, ...
-    'YTick',1:nrows,'YTickLabel',xLabels,'FontSize',10,'TickLength',[0 0],'LineWidth',0.8);
-xlabel(ax,xlbl,'FontSize',15,'FontWeight','bold'); ylabel(ax,ylbl,'FontSize',12,'FontWeight','bold');
-% title(ax,ttl,'FontSize',12,'FontWeight','bold'); box(ax,'on'); set(ax,'Layer','top'); drawnow;
+function plot_logp_heatmap(M, Lstars, Ldir, xLabels, yLabels, ttl, xlbl, ylbl, savebase, doSave) %#ok<INUSD>
+% Heatmap of -log10(FDR-adjusted p). Cell coding (from the callers):
+%   NaN  -> not tested                       (white, blank cell)
+%   0    -> tested but non-significant        (lightest band, "ns" label)
+%   >0   -> significant, value = -log10(p_adj) capped at 6, stars drawn.
+% Graphic style aligned to rerun_script3_heatmaps_thesis (local_draw_heatmap):
+%   discrete 7-level blue colormap, fixed caxis 0-6, adaptive-contrast text,
+%   grey grid, large side labels, title on, FDR colorbar.
+[nrows,ncols] = size(M);
+maxVal = 6;
+cmap = [ 0.93 0.93 0.93; ...   % 0  (ns / lightest)
+         0.86 0.90 0.97; ...   % 1
+         0.72 0.81 0.93; ...   % 2
+         0.54 0.69 0.86; ...   % 3
+         0.34 0.51 0.76; ...   % 4
+         0.16 0.32 0.60; ...   % 5
+         0.04 0.17 0.41 ];     % >=6 (darkest)
+
+% Boxes a bit smaller, with left room for the (larger) row labels.
+figW = max(360, 95*ncols + 320);
+figH = max(260, 64*nrows + 170);
+fig  = figure('Color','w','Position',[100 100 figW figH]);
+ax   = axes('Parent',fig,'Position',[0.27 0.13 0.60 0.75]);
+imagesc(ax, M, 'AlphaData', ~isnan(M));   % NaN cells stay transparent (white)
+colormap(ax, cmap); clim(ax,[0 maxVal]);
+set(ax,'Color','w'); hold(ax,'on');
+
+% Grey grid.
+for r = 0.5:1:nrows+0.5; line(ax,[0.5 ncols+0.5],[r r],'Color',[0.75 0.75 0.75],'LineWidth',1.0,'HandleVisibility','off'); end
+for c = 0.5:1:ncols+0.5; line(ax,[c c],[0.5 nrows+0.5],'Color',[0.75 0.75 0.75],'LineWidth',1.0,'HandleVisibility','off'); end
+
+% Significance stars in significant cells, "ns" in tested-but-non-sig cells.
+% Text colour adapts to the cell colour luminance for contrast.
+for r = 1:nrows
+    for c = 1:ncols
+        v = M(r,c);
+        if isnan(v), continue; end
+        star = char(Lstars(r,c));
+        if ~isempty(star)
+            txt = star; fw = 'bold';   fs = 15;
+        elseif v == 0
+            txt = 'ns';  fw = 'normal'; fs = 12;
+        else
+            continue;
+        end
+        frac = min(v,maxVal)/maxVal;
+        cIdx = max(1,min(size(cmap,1), round(1+frac*(size(cmap,1)-1))));
+        rgb  = cmap(cIdx,:);
+        lum  = 0.299*rgb(1) + 0.587*rgb(2) + 0.114*rgb(3);
+        if lum < 0.55, tc = [1 1 1]; else, tc = [0 0 0]; end
+        text(ax,c,r,txt,'HorizontalAlignment','center','VerticalAlignment','middle', ...
+            'FontSize',fs,'FontWeight',fw,'Color',tc,'Clipping','off','HandleVisibility','off');
+    end
+end
+
+% Larger side (tick + axis) labels; title on.
+set(ax,'YDir','normal','Box','on','LineWidth',1.1,'TickLength',[0 0],'Layer','top', ...
+    'XTick',1:ncols,'XTickLabel',yLabels,'YTick',1:nrows,'YTickLabel',xLabels,'FontSize',13);
+ax.XAxis.FontSize = 14; ax.XAxis.FontWeight = 'bold';
+ax.YAxis.FontSize = 16; ax.YAxis.FontWeight = 'bold';
+xlabel(ax,xlbl,'FontSize',14,'FontWeight','bold');
+ylabel(ax,ylbl,'FontSize',16,'FontWeight','bold');
+title(ax,ttl,'FontSize',14,'FontWeight','bold','Interpreter','none');
+
+cb = colorbar(ax,'eastoutside');
+cb.Label.String   = '-log10(FDR-adjusted p)';
+cb.Label.FontWeight = 'bold';
+cb.FontSize = 11;
+cb.Ticks      = 0:1:maxVal;
+cb.TickLabels = {'0','1','2','3','4','5',sprintf('>=%d',maxVal)};
+
 if doSave
     exportgraphics(fig,[savebase '.png'],'Resolution',300);
     exportgraphics(fig,[savebase '.pdf'],'ContentType','vector');
